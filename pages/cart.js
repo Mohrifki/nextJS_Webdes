@@ -100,7 +100,13 @@ const Cart = () => {
 
         {
           payment
-          ? <PaypalBtn />
+          ? <PaypalBtn
+            total= {total}
+            address= {address}
+            mobile= {mobile}
+            state= {state}
+            dispatch= {dispatch}
+           />
           : <Link href={auth.user ? '#!' : '/signin'}>
               <a className= "btn btn-dark my-2" onClick= {handlePayment}>Proceed with payment</a>
             </Link>

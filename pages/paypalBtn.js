@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react"
+import { postData } from '../utils/fetchData'
 
-const paypalBtn = () => {
+const paypalBtn = ({total, address, mobile, state, dispatch}) => {
 
   const refPaypalbtn = useRef()
+  const { cart, auth } = state
 
   useEffect(() => {
     paypal.Buttons({
@@ -11,7 +13,7 @@ const paypalBtn = () => {
         return actions.order.create({
           purchase_units: [{
             amount: {
-              value: '0.01'
+              value: total
             }
           }]
         });
@@ -19,6 +21,15 @@ const paypalBtn = () => {
       onApprove: function(data, actions) {
         // This function captures the funds from the transaction.
         return actions.order.capture().then(function(details) {
+          dispatch({type: 'NOTIFY', payload: {loading: true}})
+          postData('order', {address, mobile, cart, total}, auth.token)
+          .then(res => {
+            if(res.err) return dispatch({type: 'NOTIFY', payload: {error: res.err}})
+
+            dispatch({type: 'ADD_CART', payload: [] })
+            return dispatch({type: 'NOTIFY', payload: {success: res.msg}})
+          })
+
           // This function shows a transaction success message to your buyer.
           alert('Transaction completed by ' + details.payer.name.given_name);
         });
