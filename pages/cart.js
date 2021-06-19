@@ -4,18 +4,20 @@ import { DataContext } from '../store/GlobalState'
 // import { addToCart } from '../store/Actions'
 import CartItem from '../components/CartItem'
 import Link from 'next/link'
-import { getData } from '../utils/fetchData'
-import PaypalBtn from './paypalBtn'
+import { getData, postData } from '../utils/fetchData'
+import { useRouter } from 'next/router'
 
 const Cart = () => {
 
   const { state, dispatch } = useContext(DataContext)
-  const { cart, auth } = state
+  const { cart, auth, orders } = state
 
   const [total, setTotal] = useState(0)
   const [address, setAddress] = useState('')
   const [mobile, setMobile] = useState('')
-  const [payment, setPayment] = useState(false)
+
+  const [callback, setCallback] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     const getTotal= () => {
@@ -36,10 +38,10 @@ const Cart = () => {
       const updateCart = async () => {
         for (const item of cartLocal){
           const res = await getData(`product/${item._id}`)
-          const { _id, title, images, price, inStock } = res.product
+          const { _id, title, images, price, inStock, sold } = res.product
           if(inStock > 0){
             newArr.push({ 
-              _id, title, images, price, inStock,
+              _id, title, images, price, inStock, sold,
               quantity: item.quantity > inStock ? 1 : item.quantity 
             })
           }
@@ -50,12 +52,45 @@ const Cart = () => {
 
       updateCart()
     }
-  }, [])
+  }, [callback])
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if(!address || !mobile)
     return dispatch({ type: 'NOTIFY', payload: {error: 'Please add your address and phone Number.'} })
-    setPayment(true)
+
+    let newCart = [];
+    for(const item of cart){
+      const res = await getData(`product/${item._id}`)
+      if(res.product.inStock - item.quantity >= 0){
+        newCart.push(item)
+      }
+    }
+    
+    if(newCart.length < cart.length){
+      setCallback(!callback)
+      return dispatch({ type: 'NOTIFY', payload: {
+        error: 'The product is out of stock or the quantity is insufficient.'
+      }})
+    }
+
+    dispatch({ type: 'NOTIFY', payload: {loading: true}})
+
+    postData('order', {address, mobile, cart, total}, auth.token)
+    .then(res => {
+      if(res.err) return dispatch({type: 'NOTIFY', payload: {error: res.err}})
+
+      dispatch({type: 'ADD_CART', payload: [] })
+
+      const newOrder = {
+        ...res.newOrder,
+        user: auth.user
+      }
+
+      dispatch({type: 'ADD_ORDERS', payload: [...orders, newOrder] })
+      dispatch({type: 'NOTIFY', payload: {success: res.msg} })
+      return router.push(`/order/${res.newOrder._id}`)
+    })
+
   }
 
   if( cart.length === 0) 
@@ -64,9 +99,9 @@ const Cart = () => {
 
   return (
     <div className= "row mx-auto">
-      <head>
+      <Head>
         <title>Cart Page</title>
-      </head>
+      </Head>
 
       <div className= "col-md-8 text-secondary table-responsive my-3">
         <h2 className= "text-uppercase">Shopping Cart</h2>
@@ -98,20 +133,11 @@ const Cart = () => {
 
         <h3>Total: <span className= "text-danger">Rp. {total},-</span></h3>
 
-        {
-          payment
-          ? <PaypalBtn
-            total= {total}
-            address= {address}
-            mobile= {mobile}
-            state= {state}
-            dispatch= {dispatch}
-           />
-          : <Link href={auth.user ? '#!' : '/signin'}>
-              <a className= "btn btn-dark my-2" onClick= {handlePayment}>Proceed with payment</a>
-            </Link>
-        }
-        
+        <Link href={auth.user ? '#!' : '/signin'}>
+          <a className= "btn btn-dark my-2" onClick= {handlePayment}>Proceed with payment</a>
+        </Link>
+
+
       </div>
     </div>
   )
